@@ -139,7 +139,10 @@ export class RGB20Contract {
         return baid64Encode(hashBytes, { 
             hri: 'contract', 
             prefix: true, 
-            embedChecksum: true 
+            embedChecksum: true,
+            chunking: true,
+            chunkFirst: 8,
+            chunkLen: 7
         });
     }
 
@@ -183,7 +186,10 @@ export class RGB20Contract {
         const contractId = baid64Encode(hashBytes, { 
             hri: 'contract', 
             prefix: true, 
-            embedChecksum: true 
+            embedChecksum: true,
+            chunking: true,
+            chunkFirst: 8,
+            chunkLen: 7
         });
         
         return {
@@ -273,15 +279,18 @@ export class RGB20Contract {
             // BAID64 encoding step
             baid64: {
                 step7_encoding: {
-                    description: 'BAID64 encode hash with HRI prefix and checksum',
+                    description: 'BAID64 encode hash with HRI prefix, checksum and chunking',
                     hashInput: contractHash,
                     hri: 'contract',
                     options: {
                         prefix: true,
-                        embedChecksum: true
+                        embedChecksum: true,
+                        chunking: true,
+                        chunkFirst: 8,
+                        chunkLen: 7
                     },
                     result: contractId,
-                    breakdown: `HRI "contract:" + BAID64(${contractHash}) + embedded checksum`
+                    breakdown: `HRI "contract:" + chunked BAID64(${contractHash}) + embedded checksum (8-7-7-7-7 format)`
                 }
             },
             
