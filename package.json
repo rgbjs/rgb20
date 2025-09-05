@@ -1,6 +1,6 @@
 {
   "name": "rgb20",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "RGB20 contract creation library with StrictEncode and BAID64 integration",
   "type": "module",
   "main": "index.js",

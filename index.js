@@ -144,6 +144,159 @@ export class RGB20Contract {
     }
 
     /**
+     * Generate detailed encoding breakdown for verbose mode.
+     * @returns {Object} Detailed encoding information
+     */
+    generateVerboseContract() {
+        const assetSpec = this.createAssetSpec();
+        const contractTerms = this.createContractTerms();
+        const [txid, vout] = this.genesisUtxo.split(':');
+        
+        // Step 1: Encode AssetSpec
+        const assetSpecHex = RGB20Encoder.encodeAssetSpec(assetSpec);
+        
+        // Step 2: Encode ContractTerms  
+        const contractTermsHex = RGB20Encoder.encodeContractTerms(contractTerms);
+        
+        // Step 3: Encode Amount (total supply)
+        const amountHex = RGB20Encoder.encodeAmount(this.totalSupply);
+        
+        // Step 4: Encode Genesis UTXO
+        const txidBytes = Buffer.from(txid, 'hex').reverse(); // Little-endian
+        const txidHex = Buffer.from(txidBytes).toString('hex');
+        const voutNum = parseInt(vout);
+        const voutEncoder = new StrictEncoder();
+        voutEncoder.encodeU32(voutNum);
+        const voutHex = voutEncoder.toHex();
+        const utxoHex = txidHex + voutHex;
+        
+        // Step 5: Concatenate all parts
+        const fullEncodedData = assetSpecHex + contractTermsHex + amountHex + utxoHex;
+        
+        // Step 6: Create hash
+        const hash = createHash('sha256');
+        hash.update(Buffer.from(fullEncodedData, 'hex'));
+        const contractHash = hash.digest('hex');
+        
+        // Step 7: BAID64 encoding
+        const hashBytes = new Uint8Array(Buffer.from(contractHash, 'hex'));
+        const contractId = baid64Encode(hashBytes, { 
+            hri: 'contract', 
+            prefix: true, 
+            embedChecksum: true 
+        });
+        
+        return {
+            // Input parameters
+            input: {
+                ticker: this.ticker,
+                name: this.name,
+                precision: this.precision,
+                contractTerms: this.contractTerms,
+                totalSupply: this.totalSupply.toString(),
+                genesisUtxo: this.genesisUtxo
+            },
+            
+            // Detailed encoding breakdown
+            encoding: {
+                step1_assetSpec: {
+                    description: 'Encode AssetSpec (ticker, name, precision, details)',
+                    structure: assetSpec,
+                    encoded: assetSpecHex,
+                    length: assetSpecHex.length / 2,
+                    breakdown: {
+                        ticker_length: `0x${assetSpecHex.substring(0, 2)} (${this.ticker.length})`,
+                        ticker_utf8: `0x${assetSpecHex.substring(2, 2 + this.ticker.length * 2)} ("${this.ticker}")`,
+                        name_length: `0x${assetSpecHex.substring(2 + this.ticker.length * 2, 4 + this.ticker.length * 2)} (${this.name.length})`,
+                        name_utf8: `0x${assetSpecHex.substring(4 + this.ticker.length * 2, 4 + (this.ticker.length + this.name.length) * 2)} ("${this.name}")`,
+                        precision: `0x${assetSpecHex.slice(-4, -2)} (${this.precision})`,
+                        details_option: `0x${assetSpecHex.slice(-2)} (None)`
+                    }
+                },
+                
+                step2_contractTerms: {
+                    description: 'Encode ContractTerms (text, media)',
+                    structure: contractTerms,
+                    encoded: contractTermsHex,
+                    length: contractTermsHex.length / 2,
+                    breakdown: {
+                        text_length: `0x${contractTermsHex.substring(0, 2)} (${this.contractTerms.length})`,
+                        text_utf8: `0x${contractTermsHex.substring(2, 2 + this.contractTerms.length * 2)} ("${this.contractTerms}")`,
+                        media_option: `0x${contractTermsHex.slice(-2)} (None)`
+                    }
+                },
+                
+                step3_amount: {
+                    description: 'Encode Amount (u64 little-endian)',
+                    value: this.totalSupply.toString(),
+                    encoded: amountHex,
+                    length: amountHex.length / 2,
+                    breakdown: `0x${amountHex} (${this.totalSupply} as u64 LE)`
+                },
+                
+                step4_genesisUtxo: {
+                    description: 'Encode Genesis UTXO (txid reversed + vout u32 LE)',
+                    txid: txid,
+                    vout: voutNum,
+                    encoded: utxoHex,
+                    length: utxoHex.length / 2,
+                    breakdown: {
+                        txid_reversed: `0x${txidHex} (${txid} reversed for LE)`,
+                        vout_u32: `0x${voutHex} (${voutNum} as u32 LE)`
+                    }
+                },
+                
+                step5_concatenation: {
+                    description: 'Concatenate all encoded parts',
+                    parts: [
+                        `AssetSpec: ${assetSpecHex}`,
+                        `ContractTerms: ${contractTermsHex}`, 
+                        `Amount: ${amountHex}`,
+                        `GenesisUTXO: ${utxoHex}`
+                    ],
+                    result: fullEncodedData,
+                    totalLength: fullEncodedData.length / 2
+                }
+            },
+            
+            // Hashing step
+            hashing: {
+                step6_sha256: {
+                    description: 'SHA256 hash of concatenated data',
+                    input: fullEncodedData,
+                    inputLength: fullEncodedData.length / 2,
+                    hash: contractHash,
+                    hashLength: 32
+                }
+            },
+            
+            // BAID64 encoding step
+            baid64: {
+                step7_encoding: {
+                    description: 'BAID64 encode hash with HRI prefix and checksum',
+                    hashInput: contractHash,
+                    hri: 'contract',
+                    options: {
+                        prefix: true,
+                        embedChecksum: true
+                    },
+                    result: contractId,
+                    breakdown: `HRI "contract:" + BAID64(${contractHash}) + embedded checksum`
+                }
+            },
+            
+            // Final results
+            results: {
+                encodedData: fullEncodedData,
+                contractHash: contractHash,
+                contractId: contractId,
+                encodedLength: fullEncodedData.length / 2,
+                timestamp: new Date().toISOString()
+            }
+        };
+    }
+
+    /**
      * Generate complete contract summary.
      * @returns {Object} Complete contract information
      */

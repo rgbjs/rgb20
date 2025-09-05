@@ -65,6 +65,7 @@ ${c('bright', 'OUTPUT OPTIONS:')}
   --hash-only                   Show only contract hash
   --id-only                     Show only contract ID
   --encoded-only                Show only encoded data
+  --verbose                     Show detailed encoding breakdown
   --no-color                    Disable colored output
 
 ${c('bright', 'EXAMPLES:')}
@@ -120,19 +121,24 @@ function validateRequiredOptions(options, required) {
 
 function formatContractOutput(contract, options = {}) {
     if (options['hash-only']) {
-        return contract.contractHash;
+        return contract.contractHash || contract.results?.contractHash;
     }
     if (options['id-only']) {
-        return contract.contractId;
+        return contract.contractId || contract.results?.contractId;
     }
     if (options['encoded-only']) {
-        return contract.encodedData;
+        return contract.encodedData || contract.results?.encodedData;
     }
     if (options.json) {
         return JSON.stringify(contract, null, options.compact ? 0 : 2);
     }
 
-    // Formatted output
+    // Check if this is verbose output
+    if (contract.encoding && contract.hashing && contract.baid64) {
+        return formatVerboseOutput(contract, options);
+    }
+
+    // Standard formatted output
     return `${c('cyan', '🎨 RGB20 Contract Created')}
 
 ${c('bright', '📋 Contract Details:')}
@@ -150,6 +156,91 @@ ${c('bright', '🔗 Generated Data:')}
   ${c('yellow', 'Data Length:')}   ${contract.encodedLength} bytes
 
 ${c('bright', '⏰ Created:')} ${new Date(contract.timestamp).toLocaleString()}`;
+}
+
+function formatVerboseOutput(verbose, options = {}) {
+    const { input, encoding, hashing, baid64, results } = verbose;
+    
+    return `${c('cyan', '🔬 RGB20 Contract - Detailed Encoding Analysis')}
+
+${c('bright', '📋 Input Parameters:')}
+  ${c('green', 'Ticker:')}       ${input.ticker}
+  ${c('green', 'Name:')}         ${input.name}
+  ${c('green', 'Precision:')}    ${input.precision}
+  ${c('green', 'Contract Terms:')} ${input.contractTerms}
+  ${c('green', 'Total Supply:')} ${input.totalSupply}
+  ${c('green', 'Genesis UTXO:')} ${input.genesisUtxo}
+
+${c('bright', '🔧 Step 1: AssetSpec Encoding')}
+  ${c('blue', 'Description:')} ${encoding.step1_assetSpec.description}
+  ${c('blue', 'Structure:')}   ${JSON.stringify(encoding.step1_assetSpec.structure)}
+  ${c('blue', 'Encoded:')}     ${c('yellow', encoding.step1_assetSpec.encoded)}
+  ${c('blue', 'Length:')}      ${encoding.step1_assetSpec.length} bytes
+  ${c('blue', 'Breakdown:')}
+    • Ticker Length:  ${encoding.step1_assetSpec.breakdown.ticker_length}
+    • Ticker UTF-8:   ${encoding.step1_assetSpec.breakdown.ticker_utf8}
+    • Name Length:    ${encoding.step1_assetSpec.breakdown.name_length}
+    • Name UTF-8:     ${encoding.step1_assetSpec.breakdown.name_utf8}
+    • Precision:      ${encoding.step1_assetSpec.breakdown.precision}
+    • Details Option: ${encoding.step1_assetSpec.breakdown.details_option}
+
+${c('bright', '🔧 Step 2: ContractTerms Encoding')}
+  ${c('blue', 'Description:')} ${encoding.step2_contractTerms.description}
+  ${c('blue', 'Structure:')}   ${JSON.stringify(encoding.step2_contractTerms.structure)}
+  ${c('blue', 'Encoded:')}     ${c('yellow', encoding.step2_contractTerms.encoded)}
+  ${c('blue', 'Length:')}      ${encoding.step2_contractTerms.length} bytes
+  ${c('blue', 'Breakdown:')}
+    • Text Length:    ${encoding.step2_contractTerms.breakdown.text_length}
+    • Text UTF-8:     ${encoding.step2_contractTerms.breakdown.text_utf8}
+    • Media Option:   ${encoding.step2_contractTerms.breakdown.media_option}
+
+${c('bright', '🔧 Step 3: Amount Encoding')}
+  ${c('blue', 'Description:')} ${encoding.step3_amount.description}
+  ${c('blue', 'Value:')}       ${encoding.step3_amount.value}
+  ${c('blue', 'Encoded:')}     ${c('yellow', encoding.step3_amount.encoded)}
+  ${c('blue', 'Length:')}      ${encoding.step3_amount.length} bytes
+  ${c('blue', 'Breakdown:')}   ${encoding.step3_amount.breakdown}
+
+${c('bright', '🔧 Step 4: Genesis UTXO Encoding')}
+  ${c('blue', 'Description:')} ${encoding.step4_genesisUtxo.description}
+  ${c('blue', 'TXID:')}        ${encoding.step4_genesisUtxo.txid}
+  ${c('blue', 'VOUT:')}        ${encoding.step4_genesisUtxo.vout}
+  ${c('blue', 'Encoded:')}     ${c('yellow', encoding.step4_genesisUtxo.encoded)}
+  ${c('blue', 'Length:')}      ${encoding.step4_genesisUtxo.length} bytes
+  ${c('blue', 'Breakdown:')}
+    • TXID Reversed:  ${encoding.step4_genesisUtxo.breakdown.txid_reversed}
+    • VOUT u32:       ${encoding.step4_genesisUtxo.breakdown.vout_u32}
+
+${c('bright', '🔧 Step 5: Data Concatenation')}
+  ${c('blue', 'Description:')} ${encoding.step5_concatenation.description}
+  ${c('blue', 'Parts:')}
+${encoding.step5_concatenation.parts.map(part => `    • ${part}`).join('\n')}
+  ${c('blue', 'Result:')}      ${c('yellow', encoding.step5_concatenation.result)}
+  ${c('blue', 'Total Length:')} ${encoding.step5_concatenation.totalLength} bytes
+
+${c('bright', '🔐 Step 6: SHA256 Hashing')}
+  ${c('magenta', 'Description:')} ${hashing.step6_sha256.description}
+  ${c('magenta', 'Input:')}       ${c('dim', hashing.step6_sha256.input.substring(0, 60) + '...')}
+  ${c('magenta', 'Input Length:')} ${hashing.step6_sha256.inputLength} bytes
+  ${c('magenta', 'SHA256 Hash:')} ${c('red', hashing.step6_sha256.hash)}
+  ${c('magenta', 'Hash Length:')} ${hashing.step6_sha256.hashLength} bytes
+
+${c('bright', '🆔 Step 7: BAID64 Encoding')}
+  ${c('cyan', 'Description:')} ${baid64.step7_encoding.description}
+  ${c('cyan', 'Hash Input:')}  ${baid64.step7_encoding.hashInput}
+  ${c('cyan', 'HRI:')}         "${baid64.step7_encoding.hri}"
+  ${c('cyan', 'Options:')}     ${JSON.stringify(baid64.step7_encoding.options)}
+  ${c('cyan', 'Contract ID:')} ${c('bright', baid64.step7_encoding.result)}
+  ${c('cyan', 'Breakdown:')}   ${baid64.step7_encoding.breakdown}
+
+${c('bright', '✅ Final Results:')}
+  ${c('green', 'Encoded Data:')}  ${c('yellow', results.encodedData)}
+  ${c('green', 'Contract Hash:')} ${c('red', results.contractHash)}
+  ${c('green', 'Contract ID:')}   ${c('bright', results.contractId)}
+  ${c('green', 'Data Length:')}   ${results.encodedLength} bytes
+  ${c('green', 'Timestamp:')}     ${new Date(results.timestamp).toLocaleString()}
+
+${c('dim', '💡 This deterministic encoding ensures the same contract parameters always produce identical hashes and IDs.')}`;
 }
 
 async function interactiveMode() {
@@ -245,7 +336,14 @@ async function main() {
                     genesisUtxo: options.utxo
                 };
 
-                const contract = createRGB20Contract(params);
+                let contract;
+                if (options.verbose) {
+                    const contractInstance = new RGB20Contract(params);
+                    contract = contractInstance.generateVerboseContract();
+                } else {
+                    contract = createRGB20Contract(params);
+                }
+                
                 console.log(formatContractOutput(contract, options));
                 break;
             }
