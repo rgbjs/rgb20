@@ -1,0 +1,212 @@
+/**
+ * @fileoverview RGB20 Contract Creation Library
+ * 
+ * This module provides RGB20 token contract creation using StrictEncode for
+ * deterministic serialization and BAID64 for hash encoding with HRI prefixes.
+ * 
+ * @author RGB Community
+ * @license Apache-2.0
+ */
+
+import { StrictEncoder, RGB20Encoder } from 'strictencode';
+import { encode as baid64Encode } from 'baid64';
+import { createHash } from 'crypto';
+
+/**
+ * RGB20 contract creation and encoding utilities.
+ */
+export class RGB20Contract {
+    /**
+     * Create a new RGB20 contract instance.
+     * @param {Object} params - Contract parameters
+     * @param {string} params.ticker - Asset ticker symbol
+     * @param {string} params.name - Asset name
+     * @param {number} params.precision - Decimal precision (0-18)
+     * @param {string} params.contractTerms - Contract terms text
+     * @param {number|bigint} params.totalSupply - Total token supply
+     * @param {string} params.genesisUtxo - Genesis UTXO in format "txid:vout"
+     */
+    constructor(params) {
+        this.ticker = params.ticker;
+        this.name = params.name;
+        this.precision = params.precision;
+        this.contractTerms = params.contractTerms;
+        this.totalSupply = BigInt(params.totalSupply);
+        this.genesisUtxo = params.genesisUtxo;
+        
+        this._validateParams();
+    }
+
+    /**
+     * Validate contract parameters.
+     * @private
+     */
+    _validateParams() {
+        if (!this.ticker || typeof this.ticker !== 'string') {
+            throw new Error('Ticker must be a non-empty string');
+        }
+        if (!this.name || typeof this.name !== 'string') {
+            throw new Error('Name must be a non-empty string');
+        }
+        if (!Number.isInteger(this.precision) || this.precision < 0 || this.precision > 18) {
+            throw new Error('Precision must be an integer between 0-18');
+        }
+        if (!this.contractTerms || typeof this.contractTerms !== 'string') {
+            throw new Error('Contract terms must be a non-empty string');
+        }
+        if (this.totalSupply <= 0n) {
+            throw new Error('Total supply must be positive');
+        }
+        if (!this.genesisUtxo || !/^[0-9a-f]{64}:[0-9]+$/i.test(this.genesisUtxo)) {
+            throw new Error('Genesis UTXO must be in format "txid:vout"');
+        }
+    }
+
+    /**
+     * Create the asset specification structure.
+     * @returns {Object} AssetSpec structure
+     */
+    createAssetSpec() {
+        return {
+            ticker: this.ticker,
+            name: this.name,
+            precision: this.precision,
+            details: null
+        };
+    }
+
+    /**
+     * Create the contract terms structure.
+     * @returns {Object} ContractTerms structure
+     */
+    createContractTerms() {
+        return {
+            text: this.contractTerms,
+            media: null
+        };
+    }
+
+    /**
+     * Encode the complete RGB20 contract using StrictEncode.
+     * @returns {string} Hex-encoded contract data
+     */
+    encodeContract() {
+        const encoder = new StrictEncoder();
+        
+        // Encode AssetSpec
+        const assetSpec = this.createAssetSpec();
+        const assetSpecHex = RGB20Encoder.encodeAssetSpec(assetSpec);
+        encoder._appendBytes(new Uint8Array(Buffer.from(assetSpecHex, 'hex')));
+        
+        // Encode ContractTerms
+        const contractTerms = this.createContractTerms();
+        const contractTermsHex = RGB20Encoder.encodeContractTerms(contractTerms);
+        encoder._appendBytes(new Uint8Array(Buffer.from(contractTermsHex, 'hex')));
+        
+        // Encode Amount (total supply)
+        const amountHex = RGB20Encoder.encodeAmount(this.totalSupply);
+        encoder._appendBytes(new Uint8Array(Buffer.from(amountHex, 'hex')));
+        
+        // Encode Genesis UTXO
+        const [txid, vout] = this.genesisUtxo.split(':');
+        const txidBytes = new Uint8Array(Buffer.from(txid, 'hex').reverse()); // Little-endian
+        const voutNum = parseInt(vout);
+        
+        encoder._appendBytes(txidBytes);
+        encoder.encodeU32(voutNum);
+        
+        return encoder.toHex();
+    }
+
+    /**
+     * Create contract hash from encoded data.
+     * @returns {string} SHA256 hash of contract data (hex)
+     */
+    createContractHash() {
+        const encodedData = this.encodeContract();
+        const hash = createHash('sha256');
+        hash.update(Buffer.from(encodedData, 'hex'));
+        return hash.digest('hex');
+    }
+
+    /**
+     * Create BAID64 encoded contract ID with HRI prefix.
+     * @returns {string} BAID64 encoded contract ID with "contract:" prefix
+     */
+    createContractId() {
+        const contractHash = this.createContractHash();
+        const hashBytes = new Uint8Array(Buffer.from(contractHash, 'hex'));
+        return baid64Encode(hashBytes, { 
+            hri: 'contract', 
+            prefix: true, 
+            embedChecksum: true 
+        });
+    }
+
+    /**
+     * Generate complete contract summary.
+     * @returns {Object} Complete contract information
+     */
+    generateContract() {
+        const encodedData = this.encodeContract();
+        const contractHash = this.createContractHash();
+        const contractId = this.createContractId();
+        
+        return {
+            // Input parameters
+            ticker: this.ticker,
+            name: this.name,
+            precision: this.precision,
+            contractTerms: this.contractTerms,
+            totalSupply: this.totalSupply.toString(),
+            genesisUtxo: this.genesisUtxo,
+            
+            // Generated data
+            assetSpec: this.createAssetSpec(),
+            contractTermsStruct: this.createContractTerms(),
+            encodedData,
+            contractHash,
+            contractId,
+            
+            // Metadata
+            encodedLength: encodedData.length / 2,
+            timestamp: new Date().toISOString()
+        };
+    }
+}
+
+/**
+ * Quick contract creation helper function.
+ * @param {Object} params - Contract parameters
+ * @returns {Object} Complete contract information
+ */
+export function createRGB20Contract(params) {
+    const contract = new RGB20Contract(params);
+    return contract.generateContract();
+}
+
+/**
+ * Batch create multiple RGB20 contracts.
+ * @param {Array<Object>} contractsParams - Array of contract parameters
+ * @returns {Array<Object>} Array of complete contract information
+ */
+export function createRGB20Contracts(contractsParams) {
+    return contractsParams.map(params => createRGB20Contract(params));
+}
+
+/**
+ * Validate RGB20 contract parameters without creating the contract.
+ * @param {Object} params - Contract parameters to validate
+ * @returns {boolean} True if valid
+ * @throws {Error} If validation fails
+ */
+export function validateRGB20Params(params) {
+    try {
+        new RGB20Contract(params);
+        return true;
+    } catch (error) {
+        throw error;
+    }
+}
+
+export default RGB20Contract;
