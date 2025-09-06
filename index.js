@@ -15,6 +15,22 @@ import { createHash } from 'crypto';
 /**
  * RGB20 contract creation and encoding utilities.
  */
+
+
+ */
+const NETWORKS = {
+  bitcoin: { pubKeyHash: 0x00, scriptHash: 0x05, wif: 0x80, bech32: 'bc' },
+  testnet: { pubKeyHash: 0x6f, scriptHash: 0xc4, wif: 0xef, bech32: 'tb' },
+  liquid: { pubKeyHash: 0x39, scriptHash: 0x27, wif: 0x80, bech32: 'ex', assetHRP: 'a' },
+  liquidtestnet: { pubKeyHash: 0x6f, scriptHash: 0xc4, wif: 0xef, bech32: 'tex', assetHRP: 'ta' }
+};
+
+// Select network via URL parameter or default to mainnet
+const urlParams = new URLSearchParams(window.location.search);
+const networkName = urlParams.get('network') || 'bitcoin';
+const NETWORK = NETWORKS[networkName];
+console.log(`Selected network: ${networkName}`, NETWORK);
+
 export class RGB20Contract {
     /**
      * Create a new RGB20 contract instance.
@@ -369,6 +385,16 @@ export function validateRGB20Params(params) {
     } catch (error) {
         throw error;
     }
+}
+ * Optional: UI network selector
+ */
+const networkSelect = document.getElementById('networkSelect');
+if (networkSelect) {
+    networkSelect.value = networkName;
+    networkSelect.addEventListener('change', (e) => {
+        const selected = e.target.value;
+        window.location.search = '?network=' + selected;
+    });
 }
 
 export default RGB20Contract;
