@@ -87,7 +87,8 @@ export class RGB20Contract {
             ticker: this.ticker,
             name: this.name,
             precision: this.precision,
-            details: null
+            details: null,
+           network: string
         };
     }
 
